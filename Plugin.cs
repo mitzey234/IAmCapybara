@@ -23,6 +23,22 @@ namespace IAmCapybara
         
         public static bool perspective = false;
         
+        internal static Plugin Instance { get; private set; }
+
+        private Harmony Harmony { get; set; }
+
+        [PluginEntryPoint("IAmCapybara", "1.0.6", "You cannot stop him", "Mitzey")]
+        void LoadPlugin()
+        {
+            Harmony = new Harmony(PluginHandler.Get(this).PluginName);
+            Harmony.PatchAll();
+            
+            Instance = this;
+        }
+        
+        [PluginConfig]
+        public Config Config;
+        
         public static void SetScale(Player player, Player target, Vector3 scale, bool visibleToPlayer)
         {
             try
@@ -48,15 +64,6 @@ namespace IAmCapybara
             {
                 Log.Error($"Set scale error: {exception}");
             }
-        }
-
-        private Harmony Harmony { get; set; }
-
-        [PluginEntryPoint("IAmCapybara", "1.0.5", "You cannot stop him", "Mitzey")]
-        void LoadPlugin()
-        {
-            Harmony = new Harmony(PluginHandler.Get(this).PluginName);
-            Harmony.PatchAll();
         }
     }
 
@@ -169,8 +176,6 @@ namespace IAmCapybara
 
         public override string Description => "Controls some funnies";
 
-        public static string[] AuthorizedUsers = new string[] { "76561198040192160@steam", "76561198040083118@steam" };
-
         public override void LoadGeneratedCommands()
         {
             RegisterCommand(new CapybaraCommand());
@@ -184,7 +189,7 @@ namespace IAmCapybara
         {
             if (sender is PlayerCommandSender playerSender)
             {
-                if (!AuthorizedUsers.Contains(playerSender.ReferenceHub.authManager.UserId))
+                if (!Plugin.Instance.Config.Authorized.Contains(playerSender.ReferenceHub.authManager.UserId))
                 {
                     response = "You do not have permission to use this command!";
                     return false;
@@ -194,7 +199,9 @@ namespace IAmCapybara
                     "iam capybara - Makes you the capybara, or makes you not the capybara\n" +
                     "iam flying - Makes the capybara fly\n" +
                     "iam fake - Plays a fake attack noise.. Probably\n" +
-                    "iam attack - attacks the closest player";
+                    "iam attack - attacks the closest player\n" +
+                    "iam spin - Makes the capybara spin\n" +
+                    "iam perspective - Shrinks your perspective to the small boi";
                 return true;
             }
             else
@@ -218,7 +225,7 @@ namespace IAmCapybara
         {
             if (sender is PlayerCommandSender playerSender)
             {
-                if (!PluginCommand.AuthorizedUsers.Contains(playerSender.ReferenceHub.authManager.UserId))
+                if (!Plugin.Instance.Config.Authorized.Contains(playerSender.ReferenceHub.authManager.UserId))
                 {
                     response = "You do not have permission to use this command!";
                     return false;
@@ -265,7 +272,7 @@ namespace IAmCapybara
         {
             if (sender is PlayerCommandSender playerSender)
             {
-                if (!PluginCommand.AuthorizedUsers.Contains(playerSender.ReferenceHub.authManager.UserId))
+                if (!Plugin.Instance.Config.Authorized.Contains(playerSender.ReferenceHub.authManager.UserId))
                 {
                     response = "You do not have permission to use this command!";
                     return false;
@@ -312,7 +319,7 @@ namespace IAmCapybara
         {
             if (sender is PlayerCommandSender playerSender)
             {
-                if (!PluginCommand.AuthorizedUsers.Contains(playerSender.ReferenceHub.authManager.UserId))
+                if (!Plugin.Instance.Config.Authorized.Contains(playerSender.ReferenceHub.authManager.UserId))
                 {
                     response = "You do not have permission to use this command!";
                     return false;
@@ -359,7 +366,7 @@ namespace IAmCapybara
         {
             if (sender is PlayerCommandSender playerSender)
             {
-                if (!PluginCommand.AuthorizedUsers.Contains(playerSender.ReferenceHub.authManager.UserId))
+                if (!Plugin.Instance.Config.Authorized.Contains(playerSender.ReferenceHub.authManager.UserId))
                 {
                     response = "You do not have permission to use this command!";
                     return false;
@@ -426,7 +433,7 @@ namespace IAmCapybara
         {
             if (sender is PlayerCommandSender playerSender)
             {
-                if (!PluginCommand.AuthorizedUsers.Contains(playerSender.ReferenceHub.authManager.UserId))
+                if (!Plugin.Instance.Config.Authorized.Contains(playerSender.ReferenceHub.authManager.UserId))
                 {
                     response = "You do not have permission to use this command!";
                     return false;
@@ -490,7 +497,7 @@ namespace IAmCapybara
         {
             if (sender is PlayerCommandSender playerSender)
             {
-                if (!PluginCommand.AuthorizedUsers.Contains(playerSender.ReferenceHub.authManager.UserId))
+                if (!Plugin.Instance.Config.Authorized.Contains(playerSender.ReferenceHub.authManager.UserId))
                 {
                     response = "You do not have permission to use this command!";
                     return false;
