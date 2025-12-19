@@ -1,20 +1,81 @@
 ﻿using CommandSystem;
 using HarmonyLib;
-using PluginAPI.Core;
-using PluginAPI.Core.Attributes;
 using RemoteAdmin;
 using System;
 using System.Linq;
-using Interactables.Interobjects;
+using CentralAuth;
+using LabApi.Events.CustomHandlers;
+using LabApi.Features.Wrappers;
+using LabApi.Loader;
+using LabApi.Loader.Features.Plugins;
+using LabApi.Loader.Features.Plugins.Enums;
 using Mirror;
+using PlayerRoles.FirstPersonControl;
 using UnityEngine;
+using Utils.Networking;
 using ICommand = CommandSystem.ICommand;
+using Logger = LabApi.Features.Console.Logger;
 using Object = UnityEngine.Object;
 
 namespace IAmCapybara
 {
-    public class Plugin
+    public class IAmCapybara : Plugin
     {
+        public override string Name => "IAmCapybara";
+        public override string Description => "You cannot stop him";
+        public override string Author => "Mitzey";
+        public override LoadPriority Priority => LoadPriority.Highest;
+        public override Version Version => new Version(2, 0, 0);
+        public override Version RequiredApiVersion => new Version(1, 1, 4, 2);
+        internal static IAmCapybara Instance { get; private set; }
+        
+        public Config Config { get; private set; } = null!;
+
+        private Harmony Harmony { get; set; }
+        
+        public static void SetScale(Player player, Vector3 scale, bool visibleToPlayer)
+        {
+            try
+            {
+                player.ReferenceHub.transform.localScale = scale;
+                new SyncedScaleMessages.ScaleMessage(scale, player.ReferenceHub).SendToHubsConditionally<SyncedScaleMessages.ScaleMessage>((Func<ReferenceHub, bool>) (n => (visibleToPlayer || n.authManager.UserId != player.UserId) && n.authManager.InstanceMode == ClientInstanceMode.ReadyClient));
+                if (!visibleToPlayer) player.ReferenceHub.transform.localScale = Vector3.one;
+                new SyncedScaleMessages.ScaleMessage(player.ReferenceHub.transform.localScale, player.ReferenceHub).SendToHubsConditionally<SyncedScaleMessages.ScaleMessage>((Func<ReferenceHub, bool>) (n => n.authManager.UserId == player.UserId && n.authManager.InstanceMode == ClientInstanceMode.ReadyClient));
+            }
+            catch (Exception exception)
+            {
+                Logger.Error($"Set scale error: {exception}");
+            }
+        }
+
+        public static void Attack(Player target)
+        {
+            Scp956Pinata._instance.RpcAttack();
+            Vector3 normalized = (target.Position - Scp956Pinata._instance._tr.position).normalized;
+            target.ReferenceHub.playerStats.DealDamage(new Scp956DamageHandler(normalized));
+        }
+
+        public override void Enable()
+        {
+            Harmony = new Harmony(Name);
+            Harmony.PatchAll();
+            
+            Instance = this;
+            EventHandlers handlers = new EventHandlers();
+            CustomHandlersManager.RegisterEventsHandler(handlers);
+        }
+
+        public override void Disable()
+        {
+            
+        }
+        
+        public override void LoadConfigs()
+        {
+            base.LoadConfigs();
+            Config = this.LoadConfig<Config>("config.yml");  
+        }
+        
         public static Player targetPlayer;
 
         public static bool spin = false;
@@ -22,49 +83,8 @@ namespace IAmCapybara
         public static float speed = 2f;
         
         public static bool perspective = false;
-        
-        internal static Plugin Instance { get; private set; }
 
-        private Harmony Harmony { get; set; }
-
-        [PluginEntryPoint("IAmCapybara", "1.0.6", "You cannot stop him", "Mitzey")]
-        void LoadPlugin()
-        {
-            Harmony = new Harmony(PluginHandler.Get(this).PluginName);
-            Harmony.PatchAll();
-            
-            Instance = this;
-        }
-        
-        [PluginConfig]
-        public Config Config;
-        
-        public static void SetScale(Player player, Player target, Vector3 scale, bool visibleToPlayer)
-        {
-            try
-            {
-                player.ReferenceHub.transform.localScale = scale;
-                if (target == null)
-                {
-                    foreach (Player t in Player.GetPlayers())
-                    {
-                        if (visibleToPlayer || t.UserId != player.UserId)
-                        {
-                            NetworkServer.SendSpawnMessage(player.ReferenceHub.characterClassManager.netIdentity, t.Connection);
-                        }
-                    }
-                }
-                else
-                {
-                    NetworkServer.SendSpawnMessage(player.ReferenceHub.characterClassManager.netIdentity, target.Connection);
-                }
-                if (!visibleToPlayer) player.ReferenceHub.transform.localScale = Vector3.one;
-            }
-            catch (Exception exception)
-            {
-                Log.Error($"Set scale error: {exception}");
-            }
-        }
+        public static bool doesNotDiscriminate = false;
     }
 
     class CustomComponent : MonoBehaviour
@@ -98,14 +118,14 @@ namespace IAmCapybara
             if (Timer <= 1f/45f) return;
             Timer = 0f;
 
-            rotation += Plugin.speed;
+            rotation += IAmCapybara.speed;
             if (rotation >= 360f) rotation = 0;
 
             if (instance == null) return;
 
-            if ((Plugin.targetPlayer == null || Plugin.targetPlayer.Equals(null)) && !active) return;
+            if ((IAmCapybara.targetPlayer == null || IAmCapybara.targetPlayer.Equals(null)) && !active) return;
 
-            if (active && Plugin.targetPlayer == null && Scp956Pinata.IsSpawned)
+            if (active && IAmCapybara.targetPlayer == null && Scp956Pinata.IsSpawned)
             {
                 instance.Network_syncPos = new Vector3(0, 0, 0);
                 instance._spawnPos = new Vector3(0, 0, 0);
@@ -113,23 +133,23 @@ namespace IAmCapybara
                 active = false;
                 return;
             }
-            else if (active && Plugin.targetPlayer == null)
+            else if (active && IAmCapybara.targetPlayer == null)
             {
                 active = false;
                 return;
             }
 
 
-            if (Plugin.targetPlayer != null)
+            if (IAmCapybara.targetPlayer != null)
             {
-                if (Plugin.targetPlayer.Equals(null))
+                if (IAmCapybara.targetPlayer.Equals(null))
                 {
-                    Plugin.targetPlayer = null;
+                    IAmCapybara.targetPlayer = null;
                     return;
                 }
-                if (!Plugin.targetPlayer.IsAlive)
+                if (!IAmCapybara.targetPlayer.IsAlive)
                 {
-                    Plugin.targetPlayer = null;
+                    IAmCapybara.targetPlayer = null;
                     return;
                 }
                 if (!active)
@@ -159,10 +179,10 @@ namespace IAmCapybara
                 instance.Network_carpincho = (byte)69;
                 Scp956Pinata.IsSpawned = true;
             }
-            Vector3 vector = Plugin.targetPlayer.Position + (Plugin.perspective ? temp : Vector3.zero);
+            Vector3 vector = IAmCapybara.targetPlayer.Position + (IAmCapybara.perspective ? temp : Vector3.zero);
             instance.Network_syncPos = vector;
             instance._spawnPos = vector;
-            instance.Network_syncRot = Plugin.spin ? rotation : Plugin.targetPlayer.Camera.rotation.eulerAngles.y;
+            instance.Network_syncRot = IAmCapybara.spin ? rotation : IAmCapybara.targetPlayer.Camera.rotation.eulerAngles.y;
             instance.Network_spawned = true;
         }
     }
@@ -183,18 +203,20 @@ namespace IAmCapybara
             RegisterCommand(new FakeAttackCommand());
             RegisterCommand(new AttackCommand());
             RegisterCommand(new SpinCommand());
+            RegisterCommand(new PerspectiveCommand());
+            RegisterCommand(new KillScpsCommand());
         }
 
         protected override bool ExecuteParent(ArraySegment<string> arguments, ICommandSender sender, out string response)
         {
             if (sender is PlayerCommandSender playerSender)
             {
-                if (!Plugin.Instance.Config.Authorized.Contains(playerSender.ReferenceHub.authManager.UserId))
+                if (!IAmCapybara.Instance.Config.Authorized.Contains(playerSender.ReferenceHub.authManager.UserId))
                 {
                     response = "You do not have permission to use this command!";
                     return false;
                 }
-
+                Logger.Info(8);
                 response = "Plugin Menu:\n" +
                     "iam capybara - Makes you the capybara, or makes you not the capybara\n" +
                     "iam flying - Makes the capybara fly\n" +
@@ -225,12 +247,18 @@ namespace IAmCapybara
         {
             if (sender is PlayerCommandSender playerSender)
             {
-                if (!Plugin.Instance.Config.Authorized.Contains(playerSender.ReferenceHub.authManager.UserId))
+                if (!IAmCapybara.Instance.Config.Authorized.Contains(playerSender.ReferenceHub.authManager.UserId))
                 {
                     response = "You do not have permission to use this command!";
                     return false;
                 }
 
+                if (Scp956Pinata._instance == null)
+                {
+                    response = "The pinata is missing from the scene!";
+                    return false;
+                }
+                
                 Player target = Player.Get(sender);
 
                 if (target == null)
@@ -239,15 +267,18 @@ namespace IAmCapybara
                     return false;
                 }
 
-                if (Plugin.targetPlayer == target)
+                if (IAmCapybara.targetPlayer == target)
                 {
-                    Plugin.targetPlayer = null;
+                    IAmCapybara.targetPlayer = null;
                     response = "You are no longer a capybara";
                     return true;
                 }
 
-                Plugin.targetPlayer = Player.Get(sender);
-                Plugin.SetScale(Plugin.targetPlayer, null, new Vector3(1f, 0.53f, 1f), Plugin.perspective);
+                IAmCapybara.targetPlayer = Player.Get(sender);
+                IAmCapybara.SetScale(IAmCapybara.targetPlayer, new Vector3(1f, 0.53f, 1f), IAmCapybara.perspective);
+                
+                foreach (var player in Player.GetAll())player.DisableEffect<Scp956Target>();
+                
                 response = "You are now a capybara";
                 return true;
             }
@@ -272,7 +303,7 @@ namespace IAmCapybara
         {
             if (sender is PlayerCommandSender playerSender)
             {
-                if (!Plugin.Instance.Config.Authorized.Contains(playerSender.ReferenceHub.authManager.UserId))
+                if (!IAmCapybara.Instance.Config.Authorized.Contains(playerSender.ReferenceHub.authManager.UserId))
                 {
                     response = "You do not have permission to use this command!";
                     return false;
@@ -286,7 +317,7 @@ namespace IAmCapybara
                     return false;
                 }
 
-                if (Plugin.targetPlayer == target)
+                if (IAmCapybara.targetPlayer == target)
                 {
                     Scp956Pinata._instance.Network_flying = !Scp956Pinata._instance.Network_flying;
                     response = Scp956Pinata._instance.Network_flying ? "You're now flying!" : "You're no longer flying";
@@ -319,7 +350,7 @@ namespace IAmCapybara
         {
             if (sender is PlayerCommandSender playerSender)
             {
-                if (!Plugin.Instance.Config.Authorized.Contains(playerSender.ReferenceHub.authManager.UserId))
+                if (!IAmCapybara.Instance.Config.Authorized.Contains(playerSender.ReferenceHub.authManager.UserId))
                 {
                     response = "You do not have permission to use this command!";
                     return false;
@@ -333,7 +364,7 @@ namespace IAmCapybara
                     return false;
                 }
 
-                if (Plugin.targetPlayer == target)
+                if (IAmCapybara.targetPlayer == target)
                 {
                     Scp956Pinata._instance.RpcAttack();
                     response = "Spooky, musta been scary";
@@ -366,7 +397,7 @@ namespace IAmCapybara
         {
             if (sender is PlayerCommandSender playerSender)
             {
-                if (!Plugin.Instance.Config.Authorized.Contains(playerSender.ReferenceHub.authManager.UserId))
+                if (!IAmCapybara.Instance.Config.Authorized.Contains(playerSender.ReferenceHub.authManager.UserId))
                 {
                     response = "You do not have permission to use this command!";
                     return false;
@@ -380,10 +411,10 @@ namespace IAmCapybara
                     return false;
                 }
 
-                if (Plugin.targetPlayer == target)
+                if (IAmCapybara.targetPlayer == target)
                 {
                     Player actualTarget = null;
-                    foreach (Player p in Player.GetPlayers().Where(p => p.IsAlive && !p.IsSCP && !p.IsServer && p != Plugin.targetPlayer))
+                    foreach (Player p in Player.GetAll().Where(p => p.IsAlive && (IAmCapybara.doesNotDiscriminate ? p.IsSCP : !p.IsSCP) && !p.IsHost && p != IAmCapybara.targetPlayer))
                     {
                         if (actualTarget == null)
                         {
@@ -391,7 +422,7 @@ namespace IAmCapybara
                             continue;
                         }
                         if (actualTarget == p) continue;
-                        if ((Plugin.targetPlayer.Position - p.Position).sqrMagnitude < (Plugin.targetPlayer.Position - actualTarget.Position).sqrMagnitude) actualTarget = p;
+                        if ((IAmCapybara.targetPlayer.Position - p.Position).sqrMagnitude < (IAmCapybara.targetPlayer.Position - actualTarget.Position).sqrMagnitude) actualTarget = p;
                     }
 
                     if (actualTarget == null)
@@ -400,9 +431,7 @@ namespace IAmCapybara
                         return false;
                     }
 
-                    Scp956Pinata._instance.RpcAttack();
-                    Vector3 normalized = (actualTarget.Position - Scp956Pinata._instance._tr.position).normalized;
-                    actualTarget.ReferenceHub.playerStats.DealDamage(new Scp956DamageHandler(normalized));
+                    IAmCapybara.Attack(actualTarget);
                     response = "Ouch! That looked like it hurt..";
                     return true;
                 }
@@ -433,7 +462,7 @@ namespace IAmCapybara
         {
             if (sender is PlayerCommandSender playerSender)
             {
-                if (!Plugin.Instance.Config.Authorized.Contains(playerSender.ReferenceHub.authManager.UserId))
+                if (!IAmCapybara.Instance.Config.Authorized.Contains(playerSender.ReferenceHub.authManager.UserId))
                 {
                     response = "You do not have permission to use this command!";
                     return false;
@@ -447,7 +476,7 @@ namespace IAmCapybara
                     return false;
                 }
 
-                if (Plugin.targetPlayer == target)
+                if (IAmCapybara.targetPlayer == target)
                 {
                     if (arguments.Count >= 1)
                     {
@@ -462,12 +491,12 @@ namespace IAmCapybara
                             return true;
                         }
 
-                        Plugin.speed = speed;
+                        IAmCapybara.speed = speed;
                         response = "Set speed to: " + speed;
                         return true;
                     }
-                    Plugin.spin = !Plugin.spin;
-                    response = Plugin.spin ? "SPEEEEEEEN" : "oof..";
+                    IAmCapybara.spin = !IAmCapybara.spin;
+                    response = IAmCapybara.spin ? "SPEEEEEEEN" : "oof..";
                     return true;
                 }
                 else
@@ -497,7 +526,7 @@ namespace IAmCapybara
         {
             if (sender is PlayerCommandSender playerSender)
             {
-                if (!Plugin.Instance.Config.Authorized.Contains(playerSender.ReferenceHub.authManager.UserId))
+                if (!IAmCapybara.Instance.Config.Authorized.Contains(playerSender.ReferenceHub.authManager.UserId))
                 {
                     response = "You do not have permission to use this command!";
                     return false;
@@ -511,12 +540,12 @@ namespace IAmCapybara
                     return false;
                 }
 
-                if (Plugin.targetPlayer == target)
+                if (IAmCapybara.targetPlayer == target)
                 {
-                    Plugin.perspective = !Plugin.perspective;
-                    response = Plugin.perspective ? "Smol" : "not so smol..";
-                    if (!Plugin.perspective) Plugin.SetScale(Plugin.targetPlayer, null, new Vector3(1f, 1f, 1f), true);
-                    Plugin.SetScale(Plugin.targetPlayer, null, new Vector3(1f, 0.53f, 1f), Plugin.perspective);
+                    IAmCapybara.perspective = !IAmCapybara.perspective;
+                    response = IAmCapybara.perspective ? "Smol" : "not so smol..";
+                    if (!IAmCapybara.perspective) IAmCapybara.SetScale(IAmCapybara.targetPlayer, new Vector3(1f, 1f, 1f), true);
+                    IAmCapybara.SetScale(IAmCapybara.targetPlayer, new Vector3(1f, 0.53f, 1f), IAmCapybara.perspective);
                     return true;
                 }
                 else
@@ -533,6 +562,99 @@ namespace IAmCapybara
         }
     }
     
+    [CommandHandler(typeof(PluginCommand))]
+    class KillScpsCommand : ICommand
+    {
+        public string[] Aliases { get; set; } = Array.Empty<string>();
+
+        public string Description { get; set; } = "Toggles whether or not your attack can target SCPs";
+
+        string ICommand.Command { get; } = "scps";
+
+        public bool Execute(ArraySegment<string> arguments, ICommandSender sender, out string response)
+        {
+            if (sender is PlayerCommandSender playerSender)
+            {
+                if (!IAmCapybara.Instance.Config.Authorized.Contains(playerSender.ReferenceHub.authManager.UserId))
+                {
+                    response = "You do not have permission to use this command!";
+                    return false;
+                }
+
+                Player target = Player.Get(sender);
+
+                if (target == null)
+                {
+                    response = "I Couldn't find your player object!";
+                    return false;
+                }
+
+                if (IAmCapybara.targetPlayer == target)
+                {
+                    IAmCapybara.doesNotDiscriminate = !IAmCapybara.doesNotDiscriminate;
+                    response = IAmCapybara.doesNotDiscriminate ? "SCPs beware" : "SCPs can rest easy, for now...";
+                    return true;
+                }
+                else
+                {
+                    response = "You're no capybara!";
+                    return false;
+                }
+            }
+            else
+            {
+                response = "Only players may use this command";
+                return false;
+            }
+        }
+    }
+
+    [CommandHandler(typeof(RemoteAdminCommandHandler))]
+    class ForcePinata : ICommand
+    {
+        public string Command  => "forcepinata";
+        
+        public string[] Aliases => new[] { "fp" };
+        
+        public string Description { get; }
+        
+        public bool Execute(ArraySegment<string> arguments, ICommandSender sender, out string response)
+        {
+            if (sender is PlayerCommandSender playerSender)
+            {
+                Player target = Player.Get(sender);
+                if (!target.RemoteAdminAccess)
+                {
+                    response = "You do not have permission to use this command!";
+                    return false;
+                }
+            }
+            
+            if (Scp956Pinata._instance == null)
+            {
+                var template = Resources.FindObjectsOfTypeAll<Scp956Pinata>()
+                    .FirstOrDefault();
+
+                if (template == null)
+                {
+                    response = "Could not find prefab";
+                    return false;
+                }
+
+                var go = Object.Instantiate(template.gameObject);
+                go.SetActive(true);
+                NetworkServer.Spawn(go);
+                response = "Spawned instance";
+                return true;
+            }
+            else
+            {
+                response = "Instance already created";
+                return false;
+            }
+        }
+    }
+    
     [HarmonyPatch(typeof(Scp956Pinata))]
     class Patches
     {
@@ -540,14 +662,23 @@ namespace IAmCapybara
         [HarmonyPostfix]
         public static void Awake(Scp956Pinata __instance)
         {
-            __instance.gameObject.AddComponent<CustomComponent>().instance = __instance;
+            Logger.Warn("Attaching to pinata instance");
+            try
+            {
+                __instance.gameObject.AddComponent<CustomComponent>().instance = __instance;
+                Logger.Warn("Added Component to pinata instance");
+            }
+            catch (Exception e)
+            {
+                Logger.Error(e);
+            }
         }
 
         [HarmonyPatch(nameof(Scp956Pinata.UpdateAi))]
         [HarmonyPrefix]
         public static bool UpdateAi(Scp956Pinata __instance)
         {
-            if (Plugin.targetPlayer != null || CustomComponent.active) return false;
+            if (IAmCapybara.targetPlayer != null || CustomComponent.active) return false;
             return true;
         }
     }
