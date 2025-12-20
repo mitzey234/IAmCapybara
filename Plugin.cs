@@ -39,8 +39,7 @@ namespace IAmCapybara
             {
                 player.ReferenceHub.transform.localScale = scale;
                 new SyncedScaleMessages.ScaleMessage(scale, player.ReferenceHub).SendToHubsConditionally<SyncedScaleMessages.ScaleMessage>((Func<ReferenceHub, bool>) (n => (visibleToPlayer || n.authManager.UserId != player.UserId) && n.authManager.InstanceMode == ClientInstanceMode.ReadyClient));
-                if (!visibleToPlayer) player.ReferenceHub.transform.localScale = Vector3.one;
-                new SyncedScaleMessages.ScaleMessage(player.ReferenceHub.transform.localScale, player.ReferenceHub).SendToHubsConditionally<SyncedScaleMessages.ScaleMessage>((Func<ReferenceHub, bool>) (n => n.authManager.UserId == player.UserId && n.authManager.InstanceMode == ClientInstanceMode.ReadyClient));
+                if (!visibleToPlayer) new SyncedScaleMessages.ScaleMessage(Vector3.one, player.ReferenceHub).SendToHubsConditionally<SyncedScaleMessages.ScaleMessage>((Func<ReferenceHub, bool>) (n => n.authManager.UserId == player.UserId && n.authManager.InstanceMode == ClientInstanceMode.ReadyClient));
             }
             catch (Exception exception)
             {
@@ -53,6 +52,92 @@ namespace IAmCapybara
             Scp956Pinata._instance.RpcAttack();
             Vector3 normalized = (target.Position - Scp956Pinata._instance._tr.position).normalized;
             target.ReferenceHub.playerStats.DealDamage(new Scp956DamageHandler(normalized));
+        }
+        
+        public static Player GetPlayer(string args)
+        {
+            //Takes a string and finds the closest player from the playerlist
+            int maxNameLength = 31, LastnameDifference = 31;
+            Player plyer = null;
+            var str1 = args.ToLower();
+            foreach (var pl in Player.ReadyList)
+            {
+                if (!pl.Nickname.ToLower().Contains(args.ToLower()))
+                {
+                    continue;
+                }
+
+                if (str1.Length < maxNameLength)
+                {
+                    var x = maxNameLength - str1.Length;
+                    var y = maxNameLength - pl.Nickname.Length;
+                    var str2 = pl.Nickname;
+                    for (var i = 0; i < x; i++)
+                    {
+                        str1 += "z";
+                    }
+
+                    for (var i = 0; i < y; i++)
+                    {
+                        str2 += "z";
+                    }
+
+                    var nameDifference = LevenshteinDistance(str1, str2);
+                    if (nameDifference < LastnameDifference)
+                    {
+                        LastnameDifference = nameDifference;
+                        plyer = pl;
+                    }
+                }
+            }
+
+            return plyer;
+        }
+        
+        private static int LevenshteinDistance(string s, string t)
+        {
+            var n = s.Length;
+            var m = t.Length;
+            var d = new int[n + 1, m + 1];
+
+            // Step 1
+            if (n == 0)
+            {
+                return m;
+            }
+
+            if (m == 0)
+            {
+                return n;
+            }
+
+            // Step 2
+            for (var i = 0; i <= n; d[i, 0] = i++)
+            {
+            }
+
+            for (var j = 0; j <= m; d[0, j] = j++)
+            {
+            }
+
+            // Step 3
+            for (var i = 1; i <= n; i++)
+            {
+                //Step 4
+                for (var j = 1; j <= m; j++)
+                {
+                    // Step 5
+                    var cost = (t[j - 1] == s[i - 1]) ? 0 : 1;
+
+                    // Step 6
+                    d[i, j] = Math.Min(
+                        Math.Min(d[i - 1, j] + 1, d[i, j - 1] + 1),
+                        d[i - 1, j - 1] + cost);
+                }
+            }
+
+            // Step 7
+            return d[n, m];
         }
 
         public override void Enable()
@@ -82,6 +167,8 @@ namespace IAmCapybara
 
         public static float speed = 2f;
         
+        public static Vector3 capyScale = new Vector3(1f, 0.53f, 1f);
+        
         public static bool perspective = false;
 
         public static bool doesNotDiscriminate = false;
@@ -97,7 +184,7 @@ namespace IAmCapybara
 
         private float rotation = 0f;
 
-        private Vector3 temp = new Vector3(0f, 0.4f, 0f);
+        private Vector3 temp = new Vector3(0f, 0.35f, 0f);
 
         public Scp956Pinata instance;
 
@@ -175,11 +262,12 @@ namespace IAmCapybara
             }
             else if (!Scp956Pinata.IsSpawned)
             {
+                instance.Network_carpincho = (byte)12;
                 firstStart = false;
-                instance.Network_carpincho = (byte)69;
+                instance.Network_carpincho = (byte)67;
                 Scp956Pinata.IsSpawned = true;
             }
-            Vector3 vector = IAmCapybara.targetPlayer.Position + (IAmCapybara.perspective ? temp : Vector3.zero);
+            Vector3 vector = IAmCapybara.targetPlayer.Position + temp;
             instance.Network_syncPos = vector;
             instance._spawnPos = vector;
             instance.Network_syncRot = IAmCapybara.spin ? rotation : IAmCapybara.targetPlayer.Camera.rotation.eulerAngles.y;
@@ -260,10 +348,22 @@ namespace IAmCapybara
                 }
                 
                 Player target = Player.Get(sender);
+                if (arguments.Count > 0)
+                {
+                    target = null;
+                    if (!Player.TryGet(arguments.IndexFast(0), out target))
+                    {
+                        if (!int.TryParse(arguments.IndexFast(0), out int playerNumber) || !Player.TryGet(playerNumber, out target))
+                        {
+                            Player temp = IAmCapybara.GetPlayer(arguments.IndexFast(0));
+                            if (temp != null) target = temp;
+                        }
+                    }
+                }
 
                 if (target == null)
                 {
-                    response = "I Couldn't find your player object!";
+                    response = "I Couldn't find the player object!";
                     return false;
                 }
 
@@ -271,15 +371,17 @@ namespace IAmCapybara
                 {
                     IAmCapybara.targetPlayer = null;
                     response = "You are no longer a capybara";
+                    IAmCapybara.SetScale(target, Vector3.one, IAmCapybara.perspective);
                     return true;
                 }
 
-                IAmCapybara.targetPlayer = Player.Get(sender);
-                IAmCapybara.SetScale(IAmCapybara.targetPlayer, new Vector3(1f, 0.53f, 1f), IAmCapybara.perspective);
+                IAmCapybara.targetPlayer = target;
+                IAmCapybara.SetScale(target, IAmCapybara.capyScale, IAmCapybara.perspective);
                 
                 foreach (var player in Player.GetAll())player.DisableEffect<Scp956Target>();
                 
-                response = "You are now a capybara";
+                if (Player.Get(sender) == target) response = "You are now a capybara";
+                else response = target.DisplayName + " is now a capybara";
                 return true;
             }
             else
@@ -545,7 +647,7 @@ namespace IAmCapybara
                     IAmCapybara.perspective = !IAmCapybara.perspective;
                     response = IAmCapybara.perspective ? "Smol" : "not so smol..";
                     if (!IAmCapybara.perspective) IAmCapybara.SetScale(IAmCapybara.targetPlayer, new Vector3(1f, 1f, 1f), true);
-                    IAmCapybara.SetScale(IAmCapybara.targetPlayer, new Vector3(1f, 0.53f, 1f), IAmCapybara.perspective);
+                    IAmCapybara.SetScale(IAmCapybara.targetPlayer, IAmCapybara.capyScale, IAmCapybara.perspective);
                     return true;
                 }
                 else
@@ -680,6 +782,14 @@ namespace IAmCapybara
         {
             if (IAmCapybara.targetPlayer != null || CustomComponent.active) return false;
             return true;
+        }
+    }
+    
+    public static class ArraySegmentExtensions
+    {
+        public static T IndexFast<T>(this ArraySegment<T> arraySeg, int index)
+        {
+            return arraySeg.Array![index + arraySeg.Offset];
         }
     }
 }

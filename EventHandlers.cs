@@ -16,7 +16,7 @@ public class EventHandlers : CustomEventsHandler
 {
     public override void OnPlayerHurting(PlayerHurtingEventArgs ev)
     {
-        if (ev.Attacker == IAmCapybara.targetPlayer && ev.Attacker != null)
+        if (ev.Attacker == IAmCapybara.targetPlayer && ev.Attacker != null && ev.Player != IAmCapybara.targetPlayer)
         {
             ev.IsAllowed = false;
             var target = ev.Player;
@@ -38,6 +38,7 @@ public class EventHandlers : CustomEventsHandler
     {
         if (ev.Effect is Scp956Target && IAmCapybara.targetPlayer != null && ev.Intensity > 0)
         {
+            Logger.Info($"Player {ev.Effect} has been updated but blocked");
             ev.IsAllowed = false;
         }
     }
